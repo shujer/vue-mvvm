@@ -1,3 +1,4 @@
+
 > Vue源码是用TypeScript写的，本文采用ES6写法逐步实现MVVM框架，以理清双向绑定的过程。代码参考姜文老师的公开课
 
 #### 分析
@@ -38,6 +39,7 @@
   </script>
 </body>
 ```
+![初始效果](/img/in-post/mvvm-01.JPG)
 
 #### Vue类
 ```javascript
@@ -162,7 +164,7 @@ CompileUtil = {
   },
   // 根据表达式取到对应的数据 a.b.c
   getVal(vm, expr) {
-    // 解析a.b.c
+    // 解析a.b.c,可能有其他表达式，函数，对象的情况，这里不考虑
     return expr.split('.').reduce((data, current) => {
       return data[current]
     }, vm.$data)
@@ -188,4 +190,175 @@ CompileUtil = {
     }
   }
 }
+```
+此时，我们的页面已经可以显示了
+![Compile实现之后](/img/in-post/mvvm-02.JPG)
+
+#### Observer类实现
+- 在模板编译前，我们要进行数据劫持，修改Vue类
+```javascript
+if (this.$el) {
+  //数据劫持
+  new Observer(this.$data)
+  //编译模板，渲染到页面
+  new Compile(this, this.$el)
+}
+```
+- 实现Observer类
+```javascript
+const isObject = obj => {
+  return Object.prototype.toString.call(obj) === '[object Object]'
+}
+const isObject = obj => {
+  return Object.prototype.toString.call(obj) === '[object Object]'
+}
+class Observer {
+  constructor(data) {
+    this.observe(data)
+  }
+  observe(data) {
+    if (data && isObject(data)) {
+      Object.keys(data).forEach(key => {
+        this.defineReactive(data, key, data[key])
+        this.observe(data[key]) //递归劫持
+      })
+    }
+  }
+  /**
+   * @param {Object} obj
+   * @param {String | Number} key
+   * @param {any} value
+   * @description 定义响应式
+   */
+  defineReactive(obj, key, value) {
+    let self = this
+    Object.defineProperty(obj, key, {
+      enumerable: true,
+      configurable: true,
+      get() {
+        //取值
+        return value
+      },
+      set(newVal) {
+        //设置值
+        if (newVal != value) {
+          self.observe(newVal)
+          value = newVal
+        }
+      }
+    })
+  }
+}
+```
+此时，我们已经完成了数据劫持，但是数据改变怎么自动更新视图呢？我们需要给变化的数据添加一个观察者，绑定一个回调函数，自动调用
+#### Watcher类实现
+```javascript
+class Watcher {
+  constructor(vm, expr, cb) {
+    this.vm = vm
+    this.expr = expr
+    this.cb = cb
+    this.value = this._getVal()
+  }
+  _getVal() {
+    let value = CompileUtil.getVal(this.vm,this.expr);
+    return value;
+  }
+  //数据更新调用
+  update() {
+    let newVal = this._getVal(this.vm, this.expr)
+    let oldVal = this.value
+    if (newVal !== oldVal) {
+      this.cb(newVal)
+    }
+  }
+}
+```
+我们什么时候需要实例化一个Watcher呢？因为我们要传入绑定的回调函数用于更新视图，我们很容易想到在Compile类中，第一次挂载后，调用指令的时候会根据不同的指令调用不同的函数更新。因此，我们很容易想到在这里实例化Watcher，比如更新model函数如下
+```javascript
+model(node, expr, vm) {
+  //将表单元素的值替换成实际表达式的值
+  let fn = this.updater['model']
+  let value = this.getVal(vm, expr)
+  // 数据更新调用
+  new Watcher(vm, expr, newExpr => {
+    let newVal = this.getVal(vm, newExpr)
+    fn && fn(node, newVal)
+  })
+  fn && fn(node, value)
+},
+```
+到这里我们实现了Watcher类，同时考虑到Watcher调用位置，但是事实上，实例化之后，我们并没有立刻调用实例的update，因此此时是不起作用的，也就是说数据更新视图依旧没有更新。而且，一个数据的更新，可能同时有几处视图需要更改，我们考虑实现一个发布订阅模式来完成这个逻辑
+
+#### Dep类实现
+- 一个简单的实现
+```javascript
+class Dep {
+    constructor() {
+        this.subs = []
+    }
+    addSub(watcher) {
+        this.subs.push(watcher)
+    }
+    notify() {
+        this.subs.forEach(watcher => watcher.update())
+    }
+}
+```
+我们还要思考，在哪里实例化这个Dep呢？这里利用了一个比较巧妙也比较难以理解的方法。
+- 首先实例化一个Watcher时，我们将Watcher放置到一个全局对象上，结束时取消
+```javascript
+_getVal() {
+  Dep.target = this;
+  let value = CompileUtil.getVal(this.vm,this.expr);
+  Dep.target = null;
+  return value;
+}
+```
+- 对于每个响应式数据，我们有许多观察者Watcher对应。当调用get的时候将watcher放入dep,当调用set的时候通知更新
+```javascript
+defineReactive(obj, key, value) {
+    let self = this
+    let dep = new Dep()
+    Object.defineProperty(obj, key, {
+      enumerable: true,
+      configurable: true,
+      get() {
+        //取值
+        Dep.target && dep.addSubs(Dep.target)
+        return value
+      },
+      set(newVal) {
+        //设置值
+        if (newVal != value) {
+          self.observe(newVal)
+          value = newVal
+          dep.notify()
+        }
+      }
+    })
+  }
+```
+到这里修改数据已经能自动更新了
+![修改数据，视图自动更新](/img/in-post/mvvm-03.JPG)
+
+#### 双向绑定
+到这里我们已经数据的单向绑定，也就是数据改变，视图更新；另一个方向上的绑定，只需要通过监听事件对象即可
+```javascript
+model(node, expr, vm) {
+  //将表单元素的值替换成实际表达式的值
+  let fn = this.updater['model']
+  let value = this.getVal(vm, expr)
+  //双向绑定
+  !node.oninput &&//没有监听才绑定
+    (node.oninput = event => {
+      let value = event.target.value // 获取用户输入的内容
+      this.setValue(vm, expr, value)
+    })
+  // 数据更新调用
+  new Watcher(vm, expr, newVal => {
+    fn && fn(node, newVal)
+  })
+  fn && fn(node, value)
+},
 ```

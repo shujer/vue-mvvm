@@ -2,13 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-	<title>MVVM</title>
-	<style>
-		.red {
-			color: red;
-		}
-	</style>
-    <!-- <script src="https://cdn.jsdelivr.net/npm/vue"></script> -->
+    <title>MVVM</title>
   </head>
   <body>
     <div id="app">
@@ -19,12 +13,14 @@
           <li>{{ info.name }}</li>
           <li>{{ info.age }}</li>
         </ul>
-	  </div>
-	  <div v-html="info.name"></div>
+      </div>
+      <div v-html="html"></div>
     </div>
-	<script src="MVVM/util.js"></script>
-	<script src="MVVM/Compile.js"></script>
-	<script src="MVVM/index.js"></script>
+    <script src="MVVM/util.js"></script>
+    <script src="MVVM/Watcher.js"></script>
+    <script src="MVVM/Observer.js"></script>
+    <script src="MVVM/Compile.js"></script>
+    <script src="MVVM/index.js"></script>
     <script>
       var vm = new Vue({
         el: '#app',
@@ -32,10 +28,10 @@
           info: {
             name: 'Susie',
             age: 24
-		  },
-		  isRed: true
+          },
+          html: '<p>这是一段html测试文本</p>'
         }
-	  })
+      })
     </script>
   </body>
 </html>
