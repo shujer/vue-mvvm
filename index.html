@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+	<title>MVVM</title>
+	<style>
+		.red {
+			color: red;
+		}
+	</style>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/vue"></script> -->
+  </head>
+  <body>
+    <div id="app">
+      <input type="text" v-model="info.name" />
+      <div>{{ info.name }} {{ info.age }}</div>
+      <div>
+        <ul>
+          <li>{{ info.name }}</li>
+          <li>{{ info.age }}</li>
+        </ul>
+	  </div>
+	  <div v-html="info.name"></div>
+    </div>
+	<script src="MVVM/util.js"></script>
+	<script src="MVVM/Compile.js"></script>
+	<script src="MVVM/index.js"></script>
+    <script>
+      var vm = new Vue({
+        el: '#app',
+        data: {
+          info: {
+            name: 'Susie',
+            age: 24
+		  },
+		  isRed: true
+        }
+	  })
+    </script>
+  </body>
+</html>
